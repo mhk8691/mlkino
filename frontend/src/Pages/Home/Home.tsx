@@ -221,7 +221,6 @@ export function Home(props) {
         <PanelSettingsProvider><FavoritesProvider><RealtimeProvider><MainLayout><FeatureRouteGuard>
             <Box
                 flexGrow={1}
-                mt="5.25rem"
                 sx={{px: {xs: 1.5, sm: 3}, pb: 4, pt: 2}}
             >
                 <ImpersonationBanner />
