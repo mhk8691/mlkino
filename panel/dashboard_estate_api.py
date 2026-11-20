@@ -65,8 +65,9 @@ class DashboardEstateView(APIView):
             if amount is None or amount>10**16:return envelope(message='بازه قیمت معتبر وارد کنید.',code=400)
             q[key]=amount
         if q.get('priceFrom') is not None and q.get('priceTo') is not None and q['priceFrom']>q['priceTo']:return envelope(message='حداکثر قیمت نباید کمتر از حداقل باشد.',code=400)
-        files=[r for r in records if r.kind=='file' and matches(r.data,q)]
-        requests=[r for r in records if r.kind=='request' and matches(r.data,q)]
+        from .property_search import filter_properties
+        files=filter_properties([r for r in records if r.kind=='file'],q)
+        requests=filter_properties([r for r in records if r.kind=='request'],q)
         contracts=[r for r in activities if r.kind=='contracts' and (not q.get('city') or normalize(r.created_by.city)==normalize(q['city']))]
         layers=set(str(q.get('map_layers','files')).split('|'))&{'files','requests','contracts','agencies','experts','users'}
         if user.role not in ('superadmin','agency'):layers-={'agencies','experts','users'}

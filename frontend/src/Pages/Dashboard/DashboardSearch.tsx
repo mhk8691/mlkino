@@ -7,9 +7,10 @@ import LandscapeOutlinedIcon from '@mui/icons-material/LandscapeOutlined'
 import FilterAltOutlinedIcon from '@mui/icons-material/FilterAltOutlined'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import api from '../../Core/Request'
+import AdvancedPropertySearch from '../../Components/Estate/AdvancedPropertySearch'
 export type SearchValues=Record<string,string>
 const types=[{name:'آپارتمان',icon:<ApartmentRoundedIcon/>},{name:'ویلایی',icon:<HomeOutlinedIcon/>},{name:'تجاری',icon:<BusinessOutlinedIcon/>},{name:'اداری',icon:<BusinessOutlinedIcon/>},{name:'زمین',icon:<LandscapeOutlinedIcon/>}]
-export default function DashboardSearch({values,onChange,onSearch,toolbar=false,onApply}:{values:SearchValues;onChange:(x:SearchValues)=>void;onSearch:()=>void;toolbar?:boolean;onApply?:()=>void}){
+function DashboardSearchToolbar({values,onChange,onSearch,toolbar=false,onApply}:{values:SearchValues;onChange:(x:SearchValues)=>void;onSearch:()=>void;toolbar?:boolean;onApply?:()=>void}){
  const [provinces,setProvinces]=useState<string[]>([])
  useEffect(()=>{const c=new AbortController();api.get('locations/',{params:{level:'province',all:true},signal:c.signal}).then(r=>{if(!c.signal.aborted)setProvinces(r.data.data.results.map((x:any)=>x.name))}).catch(()=>{});return()=>c.abort()},[])
  const [cities,setCities]=useState<string[]>([]),[districts,setDistricts]=useState<string[]>([]),[error,setError]=useState('')
@@ -27,4 +28,8 @@ export default function DashboardSearch({values,onChange,onSearch,toolbar=false,
  </div>{error&&<span className="dashboard-inline-error">{error}</span>}
  {toolbar?<><Button className="dashboard-filter-apply" type="button" variant="contained" endIcon={<FilterAltOutlinedIcon/>} onClick={onApply}>اعمال فیلتر</Button><Button type="button" variant="outlined" aria-label="پاک کردن فیلترهای پیشخوان" onClick={()=>onChange({propertyType:'',city:'',district:'',priceFrom:'',priceTo:''})}>×</Button></>:<Button type="submit" variant="contained" fullWidth endIcon={<SearchRoundedIcon/>}>جستجوی ملک</Button>}
  </form>
+}
+
+export default function DashboardSearch(props:Parameters<typeof DashboardSearchToolbar>[0]&{count?:number}){
+ return props.toolbar?<DashboardSearchToolbar {...props}/>:<AdvancedPropertySearch values={props.values} onChange={props.onChange} onSearch={props.onSearch} count={props.count}/>
 }

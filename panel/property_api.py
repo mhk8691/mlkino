@@ -157,24 +157,12 @@ class PropertyListView(APIView):
         if audience: rows=[r for r in rows if r.data.get('requesterType','customer')==audience]
         search=normalize(params.get('search'))
         if search: rows=[r for r in rows if search in normalize(' '.join(str(v) for k,v in r.data.items() if k not in ('images','virtualTourLink')))]
-        for key in ['propertyType','contractType','province','county','city','district','neighborhood','status']:
-            expected=normalize(params.get(key))
+        from .property_search import filter_properties
+        rows = filter_properties(rows, params)
+        for key in ('county',):
+            expected = normalize(params.get(key))
             if expected:
-                rows=[r for r in rows if any(expected==normalize(v) for v in (r.data.get(key) if isinstance(r.data.get(key),list) else [r.data.get(key)]))]
-        def within_bound(row,prefix,suffix,amount):
-            field='area' if prefix=='area' else ('mortgagePrice' if row.data.get('contractType')=='رهن و اجاره' else 'totalPrice')
-            low=row.data.get(field,row.data.get(field+'From'))
-            high=row.data.get(field,row.data.get(field+'To'))
-            if low is None and high is None:return False
-            return (high is None or high>=amount) if suffix=='From' else (low is None or low<=amount)
-        for prefix in ('area','price'):
-            for suffix in ('From','To'):
-                raw=params.get(prefix+suffix)
-                if not raw:continue
-                try:amount=float(normalize(raw).replace(',',''))
-                except ValueError:raise ValidationError({prefix+suffix:'عدد معتبر وارد کنید.'})
-                if not math.isfinite(amount) or amount<0:raise ValidationError({prefix+suffix:'عدد معتبر وارد کنید.'})
-                rows=[r for r in rows if within_bound(r,prefix,suffix,amount)]
+                rows = [r for r in rows if normalize(r.data.get(key)) == expected]
         price=params.get('totalPrice')
         if price:
             try: amount=float(normalize(price).replace(',',''))
