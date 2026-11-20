@@ -1,0 +1,12 @@
+# Deployment artifacts never contain environment or media files.
+deployment/artifacts/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.local/
+
+# Rebuildable first-party map cache, never release user or provider caches.
+.map-cache/

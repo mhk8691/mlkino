@@ -1,0 +1,84 @@
+from datetime import timedelta
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.utils import timezone
+from rest_framework.test import APIClient
+from .models import PropertyRecord,AgencyExpertLink,EstateActivity
+class DashboardEstateTests(TestCase):
+    def setUp(self):
+        U=get_user_model();self.admin=U.objects.create_superuser('09127003001','test-password');self.agency=U.objects.create_user('09127003002',role='agency');self.expert=U.objects.create_user('09127003003',role='expert');self.other=U.objects.create_user('09127003004',role='agency');self.user=U.objects.create_user('09127003005')
+        AgencyExpertLink.objects.create(agency=self.agency,expert=self.expert)
+        self.file=PropertyRecord.objects.create(kind='file',created_by=self.expert,data={'propertyType':'آپارتمان','province':'قم','city':'قم','district':'منطقه ۴','contractType':'فروش','totalPrice':200})
+        PropertyRecord.objects.create(kind='file',created_by=self.other,data={'propertyType':'زمین','province':'تهران','city':'تهران','contractType':'فروش','totalPrice':500})
+        self.old=PropertyRecord.objects.create(kind='request',created_by=self.expert,data={'city':'قم'})
+        PropertyRecord.objects.filter(pk=self.old.pk).update(created_at=timezone.now()-timedelta(days=40))
+        EstateActivity.objects.create(kind='follow-ups',created_by=self.expert,data={'file_name':'پیگیری'})
+        self.client=APIClient()
+    def get(self,user,**params):
+        self.client.force_authenticate(user);return self.client.get('/panel/dashboard/estate-overview/',params)
+    def test_city_map_uses_visible_records_and_counters_keep_their_period(self):
+        r=self.get(self.agency);self.assertEqual(r.status_code,200,r.data);d=r.data['data'];self.assertEqual(d['matching_files'],1);self.assertEqual(d['points'][0]['city'],'قم');self.assertEqual(d['points'][0]['count'],1);self.assertEqual(d['map_precision'],'city')
+        self.assertEqual(d['counts']['files']['total'],1);self.assertEqual(d['counts']['requests']['previous'],1);self.assertEqual(d['counts']['requests']['recent'],0);self.assertEqual(d['counts']['experts']['total'],1);self.assertEqual(d['counts']['followups']['total'],1)
+        self.assertEqual(self.get(self.user).data['data']['matching_files'],0)
+        self.assertEqual(self.get(self.admin).data['data']['matching_files'],2)
+    def test_filters_affect_map_but_not_overall_cards_and_bad_prices_are_rejected(self):
+        d=self.get(self.admin,city='قم',propertyType='آپارتمان',priceFrom='۱۵۰',priceTo='۲۵۰').data['data'];self.assertEqual(d['matching_files'],1);self.assertEqual(d['counts']['files']['total'],2)
+        self.assertEqual(self.get(self.admin,priceFrom='999').data['data']['matching_files'],0)
+        self.assertEqual(self.get(self.admin,priceFrom='bad').status_code,400);self.assertEqual(self.get(self.admin,priceFrom='500',priceTo='100').status_code,400)
+        self.client.force_authenticate(None);self.assertEqual(self.client.get('/panel/dashboard/estate-overview/').status_code,401)
+    def test_unresolved_locations_are_counted_without_inventing_coordinates(self):
+        PropertyRecord.objects.create(kind='file',created_by=self.user,data={'city':'شهر نامشخص','ownerSubmission':True})
+        d=self.get(self.user).data['data'];self.assertEqual(d['matching_files'],1);self.assertEqual(d['mapped_files'],0);self.assertEqual(d['points'],[])
+
+    def test_presence_is_scoped_to_agency_and_filters_live_sessions(self):
+        from accounts.models import DeviceSession
+        from uuid import uuid4
+        U=get_user_model()
+        U.objects.filter(pk__in=[self.expert.pk,self.other.pk]).update(province='قم',city='قم')
+        DeviceSession.objects.create(user=self.expert,refresh_key=uuid4().hex,expires_at=timezone.now()+timedelta(days=1))
+        live=self.get(self.agency,map_layers='experts',presence='online').data['data']
+        self.assertEqual(live['matching_items'],1)
+        self.assertEqual(live['points'][0]['experts'],1)
+        self.assertEqual(live['points'][0]['online'],1)
+        self.assertEqual(self.get(self.agency,map_layers='agencies',presence='offline').data['data']['matching_items'],1)
+        self.assertEqual(self.get(self.agency,map_layers='experts',presence='offline').data['data']['matching_items'],0)
+        DeviceSession.objects.filter(user=self.expert).update(revoked_at=timezone.now())
+        self.assertEqual(self.get(self.agency,map_layers='experts',presence='online').data['data']['matching_items'],0)
+
+    def test_public_map_excludes_drafts_and_private_identity(self):
+        self.file.publication_state='published';self.file.data.update(latitude=34.6,longitude=50.8,ownerPhone='private');self.file.save()
+        self.client.force_authenticate(None)
+        r=self.client.get('/panel/public/map/')
+        self.assertEqual(r.status_code,200)
+        rows=r.data['data']['results']
+        self.assertEqual([row['id'] for row in rows],[self.file.pk])
+        self.assertNotIn('ownerPhone',rows[0])
+
+    def test_map_tiles_touching_iran_are_available_even_when_center_is_outside(self):
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch,Mock
+        from django.test import override_settings
+        with TemporaryDirectory() as folder,override_settings(MLKINO_TILE_CACHE_DIR=folder),patch('panel.geography_api.requests.get') as get:
+            get.return_value=Mock(content=b'\x89PNG\r\n\x1a\nfixture')
+            self.client.force_authenticate(self.admin)
+            self.assertEqual(self.client.get('/panel/locations/tiles/5/19/12.png').status_code,200)
+            self.assertEqual(self.client.get('/panel/locations/tiles/5/0/0.png').status_code,404)
+            self.assertEqual(get.call_count,1)
+
+    def test_chart_data_and_map_layers_follow_agency_scope(self):
+        self.file.data.update(area=100);self.file.save(update_fields=['data'])
+        self.old.data.update(province='قم');self.old.save(update_fields=['data'])
+        d=self.get(self.agency,map_layers='files|requests',city='قم').data['data']
+        self.assertEqual(len(d['trend']),30)
+        self.assertEqual(sum(x['count'] for x in d['trend']),1)
+        self.assertEqual(d['distribution'],[{'label':'آپارتمان','count':1}])
+        self.assertEqual(d['points'][0]['files'],1)
+        self.assertEqual(d['points'][0]['requests'],1)
+        self.assertEqual(d['matching_items'],2)
+        self.assertEqual(len(d['recent_requests']),1)
+        self.assertEqual(d['market_index']['sample_size'],1)
+        self.assertEqual(d['market_index']['price_per_meter'],2)
+        self.assertEqual(self.get(self.user).data['data']['recent_requests'],[])
+        self.assertEqual(self.get(self.agency,map_layers='').data['data']['points'],[])
+        self.assertEqual(self.get(self.admin,priceFrom='1',priceTo='0').status_code,400)
+        self.assertEqual(self.get(self.admin,priceFrom='',priceTo='100').status_code,200)
