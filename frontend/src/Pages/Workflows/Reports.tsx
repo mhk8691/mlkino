@@ -16,7 +16,7 @@ import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlin
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
 import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined'
 import UnfoldMoreRoundedIcon from '@mui/icons-material/UnfoldMoreRounded'
-import {Link} from 'react-router-dom'
+import {Link,useSearchParams} from 'react-router-dom'
 import {CurrentUserContext} from '../../Core/CurrentUser'
 import api from '../../Core/Request'
 import FileInput from '../Files/FileInput'
@@ -37,7 +37,9 @@ const recordFilters = (filters: string, type: string) => {try {return JSON.strin
 export function Reports() {
   const {user} = useContext(CurrentUserContext)
   const allowed = useMemo(() => user.role === 'superadmin' ? Object.keys(reportTitles) as ReportType[] : user.role === 'agency' ? ['operations','experts','finance'] as ReportType[] : ['finance'] as ReportType[], [user.role])
-  const [report, setReport] = useState<ReportType>(allowed[0])
+  const [routeQuery] = useSearchParams()
+  const requestedReport = routeQuery.get('report') as ReportType
+  const [report, setReport] = useState<ReportType>(allowed.includes(requestedReport) ? requestedReport : allowed[0])
   const [filters, setFilters] = useState<ReportFilters>({...initialReportFilters})
   const [page, setPage] = useState(1), [pageSize, setPageSize] = useState(10), [view, setView] = useState('chart')
   const [data, setData] = useState<ReportData>(emptyData), [loading, setLoading] = useState(true)
