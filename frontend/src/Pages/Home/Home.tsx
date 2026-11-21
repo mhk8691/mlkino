@@ -91,6 +91,7 @@ import { LogsEdit } from '../Logs/Edit/LogsEdit'
 const PlansList=lazy(()=>import('../Plans/PlansList'))
 const PlanEditor=lazy(()=>import('../Plans/PlanEditor'))
 const CapabilitiesList=lazy(()=>import('../Plans/CapabilitiesList'))
+const Archives=lazy(()=>import('../Archives/ArchiveWorkspace').then(m=>({default:m.Archives})))
 const Reports=lazy(()=>import('../Workflows/Reports').then(m=>({default:m.Reports})))
 const WorkflowPage=lazy(()=>import('../Workflows/WorkflowPage').then(m=>({default:m.WorkflowPage})))
 const WorkflowOverview=lazy(()=>import('../Workflows/WorkflowOverview').then(m=>({default:m.WorkflowOverview})))
@@ -394,8 +395,8 @@ export function Home(props) {
                         <Route path="contracts/:id" element={<ContractsEdit />} />
                         {/* ...........archives.......... */}
 
-                        <Route path="archives" element={<WorkflowPage section="archive"/>} />
-                        <Route path="archives/:id" element={<WorkflowPage section="archive"/>} />
+                        <Route path="archives" element={<Archives/>} />
+                        <Route path="archives/:id" element={<Archives/>} />
                         {/* ...........Tasks.......... */}
                         <Route
                             path="tasks/create"
